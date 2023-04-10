@@ -7,7 +7,7 @@
 #include <chrono>
 #include <thread>
 
-//GAME SETS
+//GAME SETS6
 const int windowWidth = 1200;
 const int windowHeight = 800;
 const int blockSize = 20;
