@@ -30,14 +30,14 @@ public:
     void gameOver();
     int score; //zmienna do przechowywania aktualnego wyniku
     int score2;
-
+    bool gamePaused;
 private:
     void handleInput();
     void update();
     void render();
     void generateFood();
     bool checkCollision();
-    void sendReciveInfo();
+    void sendReciveScore();
 
     sf::RenderWindow window;
     std::list<SnakeSegment> snake;
@@ -63,6 +63,7 @@ SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake
         std::cout << "Blad: nie udalo się zaladowac czcionki!" << std::endl;
     }
 
+    gamePaused = false;
     score = 0;
     score2 = 0;
     scoreText.setFont(font);
@@ -71,7 +72,7 @@ SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake
     scoreText.setPosition(10, 10);
 }
 
-void SnakeGame::sendReciveInfo()
+void SnakeGame::sendReciveScore() //funkcja wymieniająca wyniki graczy z serwerem
 {
     ///* klasa Packet ułatwia wysyłanie wiadomosci do serwera dzięki automatycznej obsłudze konwersji pakietu sf::Packet 
     //na dane binarne które mogą być przesłane przez gniazdo. */
@@ -101,23 +102,32 @@ void SnakeGame::sendReciveInfo()
 }
 
 void SnakeGame::run() {
-    sf::Clock clock;
-    float deltaTime;
 
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
+        sf::Clock clock;
+        float deltaTime;
+
+        while (window.isOpen()) {
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) {
+                    window.close();
+                }
+            }
+            if (gamePaused == true)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            else
+            {
+                deltaTime = clock.restart().asSeconds();
+                handleInput();
+                update();
+                render();
+                sendReciveScore();
+                updateScore();
+                std::this_thread::sleep_for(std::chrono::milliseconds(40));
             }
         }
-        deltaTime = clock.restart().asSeconds();
-        handleInput();
-        update();
-        render();
-        sendReciveInfo();
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
-    }
 }
 
 void SnakeGame::updateScore() 
@@ -128,6 +138,7 @@ void SnakeGame::updateScore()
 
 void SnakeGame::gameOver()
 {
+    gamePaused = true;
     gameOverText.setFont(font);
     gameOverText.setCharacterSize(40);
     gameOverText.setFillColor(sf::Color::White);
@@ -139,8 +150,7 @@ void SnakeGame::gameOver()
     else if(score==score2){
         gameOverText.setString("REMIS! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
     }
-    else
-    {
+    else{
         gameOverText.setString("PRZEGRALES! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
     }
 }
