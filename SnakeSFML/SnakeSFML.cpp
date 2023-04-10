@@ -28,16 +28,19 @@ public:
     void run();
     void updateScore();
     void gameOver();
-    int score; //zmienna do przechowywania aktualnego wyniku
-    int score2;
+    bool gameStart();
+    int playerScore; //zmienna do przechowywania aktualnego wyniku
+    int enemyScore;
     bool gamePaused;
+    bool enemyLost;
 private:
     void handleInput();
     void update();
     void render();
     void generateFood();
     bool checkCollision();
-    void sendReciveScore();
+    void sendReceiveScore();
+    void sendReceiveGameOver();
 
     sf::RenderWindow window;
     std::list<SnakeSegment> snake;
@@ -64,40 +67,79 @@ SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake
     }
 
     gamePaused = false;
-    score = 0;
-    score2 = 0;
+    enemyLost = false;
+    playerScore = 0;
+    enemyScore = 0;
     scoreText.setFont(font);
     scoreText.setCharacterSize(22);
     scoreText.setFillColor(sf::Color::White);
     scoreText.setPosition(10, 10);
 }
 
-void SnakeGame::sendReciveScore() //funkcja wymieniająca wyniki graczy z serwerem
+bool SnakeGame::gameStart()
+{
+    return true;
+}
+
+void SnakeGame::sendReceiveScore() //funkcja wymieniająca wyniki graczy z serwerem
 {
     ///* klasa Packet ułatwia wysyłanie wiadomosci do serwera dzięki automatycznej obsłudze konwersji pakietu sf::Packet 
     //na dane binarne które mogą być przesłane przez gniazdo. */
     //sf::Packet myScore; //wynik gracza
     //sf::Packet enemyScore; //wynik przeciwnika
-    //myScore << score; //Przekonwertowanie wyniku (int) na wynik (Packet)
+    //myScore << playerScore; //Przekonwertowanie wyniku (int) na wynik (Packet)
     std::size_t receivedSize;
 
-    if (tcpSocket.send(&score, sizeof(int)) != sf::Socket::Done)
+    if (tcpSocket.send(&playerScore, sizeof(int)) != sf::Socket::Done)
     {
-        std::cout << "problem z przeslaniem wyniku gracza: " << score<<std::endl;
+        std::cout << "problem z przeslaniem wyniku gracza: " << playerScore<<std::endl;
     }
     else { 
-        tcpSocket.send(&score, sizeof(int));
-        std::cout << "aktualny wynik gracza: " << score << std::endl;
+        tcpSocket.send(&playerScore, sizeof(int));
+        std::cout << "aktualny wynik gracza: " << playerScore << std::endl;
     }
 
 
-    if (tcpSocket.receive(&score2,sizeof(score2),receivedSize)!=sf::Socket::Done)
+    if (tcpSocket.receive(&enemyScore,sizeof(enemyScore),receivedSize)!=sf::Socket::Done)
     {
-        std::cout << "problem z odebraniem wyniku gracza, aktualny wynik przeciwnika: " << score2 << std::endl;
+        std::cout << "problem z odebraniem wyniku gracza, aktualny wynik przeciwnika: " << enemyScore << std::endl;
     }
     else { 
-        tcpSocket.receive(&score2, sizeof(score2), receivedSize);
-        std::cout<<"aktualny wynik przeciwnika: "<<score2<<std::endl;
+        tcpSocket.receive(&enemyScore, sizeof(enemyScore), receivedSize);
+        std::cout<<"aktualny wynik przeciwnika: "<<enemyScore<<std::endl;
+    }
+}
+
+void SnakeGame::sendReceiveGameOver()
+{
+    if (gamePaused == true)
+    {
+        std::string message = "gameover";
+        if (tcpSocket.send(&message, sizeof(message) != sf::Socket::Done))
+        {
+            std::cout << "problem z wysłaniem prosby o zakonczenie gry\n" << std::endl;
+        }
+        else {
+            tcpSocket.send(&message, sizeof(message));
+        }
+    }
+    else
+    {
+        std::size_t receivedSize;
+        std::string message;
+        if (tcpSocket.receive(&message, sizeof(message), receivedSize) != sf::Socket::Done)
+        {
+            std::cout << "Gra w toku...\n" << std::endl;
+        }
+        else {
+            tcpSocket.receive(&message, sizeof(message), receivedSize);
+            if(message=="gameover" && enemyScore<playerScore){ 
+                gamePaused = true; //przeciwnik przegrał mając mniej punktów od nas dlatego mozna zakonczyc gre
+            }
+            else if(message == "gameover" && enemyScore >= playerScore){
+                enemyLost = true; //wiemy ze przeciwnik przegral ale ma wiecej lub tyle samo punktów co my dlatego mozemy grac dalej
+            }
+        }
     }
 }
 
@@ -123,9 +165,10 @@ void SnakeGame::run() {
                 handleInput();
                 update();
                 render();
-                sendReciveScore();
+                sendReceiveScore();
                 updateScore();
-                std::this_thread::sleep_for(std::chrono::milliseconds(40));
+                //sendReceiveGameOver();
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
             }
         }
 }
@@ -133,7 +176,7 @@ void SnakeGame::run() {
 void SnakeGame::updateScore() 
 {
     // Aktualizacja tekstu wyświetlającego aktualny wynik
-    scoreText.setString("Twoje punkty: " + std::to_string(score)+ "\n Punkty przeciwnika: "+std::to_string(score2));
+    scoreText.setString("Twoje punkty: " + std::to_string(playerScore)+ "\n Punkty przeciwnika: "+std::to_string(enemyScore));
 }
 
 void SnakeGame::gameOver()
@@ -144,14 +187,14 @@ void SnakeGame::gameOver()
     gameOverText.setFillColor(sf::Color::White);
     gameOverText.setPosition(windowWidth/2-465,windowHeight/2);
 
-    if (score > score2){
-        gameOverText.setString("WYGRALES! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
+    if (playerScore > enemyScore){
+        gameOverText.setString("WYGRALES! Twoje punkty: " + std::to_string(playerScore) + " Punkty przeciwnika: " + std::to_string(enemyScore));
     }
-    else if(score==score2){
-        gameOverText.setString("REMIS! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
+    else if(playerScore==enemyScore){
+        gameOverText.setString("REMIS! Twoje punkty: " + std::to_string(playerScore) + " Punkty przeciwnika: " + std::to_string(enemyScore));
     }
     else{
-        gameOverText.setString("PRZEGRALES! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
+        gameOverText.setString("PRZEGRALES! Twoje punkty: " + std::to_string(playerScore) + " Punkty przeciwnika: " + std::to_string(enemyScore));
     }
 }
 
@@ -200,7 +243,7 @@ void SnakeGame::update() {
     if (head.x == food.getPosition().x && head.y == food.getPosition().y) {
 
         generateFood();
-        score++; //dodanie punktów
+        playerScore++; //dodanie punktów
         updateScore();
     }
     else {
@@ -287,28 +330,28 @@ reconnect:
 
 
     // Potwierdzenie połączenia z serwerem
-    std::cout << "Polaczenie udane!";
-    std::string message = "Client coneccted!\n"; // Przykładowa wiadomość
+    std::cout << "Polaczenie udane... ";
+    std::string message = "Client coneccted!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
     do
     {
         short t = 0;
         if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done && t <= 15) {
             // Obsługa błędu wysyłania danych
             std::cout << "Connection error..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // program czeka 1 s
+            std::this_thread::sleep_for(std::chrono::seconds(2)); 
             t++;
         }
         else if(tcpSocket.send(message.c_str(), message.size() + 1) == sf::Socket::Done){ 
             break; //wyjscie z petli
         }
         else { 
-            return -1; // Zakończenie programu
+            std::cout << "-------FATAL ERROR-------- \n" << std::endl;
+                return -1; // Zakończenie programu
         } 
     } while (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done);
 
-
     // Sprawdzenie czy klient moze odebrac dane
-    char recMsg[512]; 
+    char recMsg[512];
     std::size_t received;
     if (tcpSocket.receive(recMsg, sizeof(recMsg), received) != sf::Socket::Done) {
         // Obsługa błędu odbierania danych
@@ -317,14 +360,14 @@ reconnect:
         return -1; // Zakończenie programu z kodem błędu
     }
     // Wyświetlenie otrzymanych danych jako test
-    std::cout << "Otrzymane dane od serwera: " << recMsg << "\n"; 
+    /*std::cout << "Otrzymane dane od serwera: " << recMsg << "\n";*/
 
     //inicjalizacja okna i silnika gry
     std::cout << "--------------------Rozpoczecie gry!--------------------\n";
-    message = "START";
-    tcpSocket.send(message.c_str(), message.size());
     SnakeGame game;
+    game.gameStart();
     game.run();
+    std::cout << "--------------------Gra sie zakonczyla!--------------------\n" << std::endl;
     /*tcpSocket.close();*/
     return 0;
 }
