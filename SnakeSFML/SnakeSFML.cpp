@@ -7,9 +7,6 @@
 #include <chrono>
 #include <thread>
 
-sf::IpAddress serverIp = "83.22.157.9";
-int serverPort = 1202;
-
 //GAME SETS6
 const int windowWidth = 1200;
 const int windowHeight = 800;
@@ -154,14 +151,15 @@ void SnakeGame::run() {
 
         while (window.isOpen()) {
             sf::Event event;
-            while (window.pollEvent(event)) {
+            while (window.pollEvent(event)) 
+            {
                 if (event.type == sf::Event::Closed) {
                     window.close();
                 }
             }
             if (gamePaused == true)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 sendReceiveScore();
             }
             else
@@ -172,7 +170,7 @@ void SnakeGame::run() {
                 render();
                 sendReceiveScore();
                 updateScore();
-                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                //std::this_thread::sleep_for(std::chrono::milliseconds(40));
             }
         }
 }
@@ -317,28 +315,25 @@ bool SnakeGame::checkCollision() {
 
 int main(int argc, char** argv)
 {
+    sf::IpAddress serverIp = "83.22.157.9";
+    int serverPort = 1202;
 
-reconnect:
+Reconnect:// Ustanawianie połączenia z serwerem
+    while (tcpSocket.connect(serverIp, serverPort) != sf::Socket::Done)
+    {
 
-    // Ustanawianie połączenia z serwerem
-
-    if (tcpSocket.connect(serverIp, serverPort) != sf::Socket::Done) { // Obsługa błędu połączenia
-   
-        std::cout << "nie udalo polaczyc sie z serwerem...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
-        goto reconnect;
+            std::cout << "nie udalo polaczyc sie z serwerem...\n";
+            //std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
     }
+    std::cout << "Polaczenie udane...\n";
 
-
-    // Potwierdzenie połączenia z serwerem
-    std::cout << "Polaczenie udane... ";
     std::string message = "Client coneccted!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
     do
     {
         short t = 0;
         if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done && t <= 15) {
             // Obsługa błędu wysyłania danych
-            std::cout << "Connection error..." << std::endl;
+            std::cout << "blad polaczenia...\n" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2)); 
             t++;
         }
