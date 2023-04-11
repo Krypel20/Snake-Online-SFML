@@ -7,8 +7,8 @@
 #include <chrono>
 #include <thread>
 
-sf::IpAddress serverIp = "192.168.1.20";
-int serverPort = 20202;
+sf::IpAddress serverIp = "83.22.157.9";
+int serverPort = 1202;
 
 //GAME SETS6
 const int windowWidth = 1200;
@@ -36,6 +36,7 @@ public:
     int enemyScore;
     bool gamePaused;
     bool enemyLost;
+
 private:
     void handleInput();
     void update();
@@ -43,7 +44,7 @@ private:
     void generateFood();
     bool checkCollision();
     void sendReceiveScore();
-    void sendReceiveGameOver();
+    void sendReceiveGameOver(); // usunac i dodac do sendReceiveScore()
 
     sf::RenderWindow window;
     std::list<SnakeSegment> snake;
@@ -161,6 +162,7 @@ void SnakeGame::run() {
             if (gamePaused == true)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                sendReceiveScore();
             }
             else
             {
@@ -170,8 +172,7 @@ void SnakeGame::run() {
                 render();
                 sendReceiveScore();
                 updateScore();
-                //sendReceiveGameOver();
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
             }
         }
 }
@@ -221,7 +222,6 @@ void SnakeGame::update() {
     // Aktualizacja kierunku na podstawie następnego kierunku
     currentDirection = nextDirection;
     window.draw(scoreText);
-    updateScore();
 
     // Aktualizacja pozycji głowy węża na podstawie kierunku
     head = snake.front();
