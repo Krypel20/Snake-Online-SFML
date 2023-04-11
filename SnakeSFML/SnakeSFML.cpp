@@ -7,7 +7,10 @@
 #include <chrono>
 #include <thread>
 
-//GAME SETS6
+sf::IpAddress serverIp = "83.22.157.9";
+int serverPort = 1202;
+
+//GAME SETS
 const int windowWidth = 1200;
 const int windowHeight = 800;
 const int blockSize = 20;
@@ -96,18 +99,16 @@ void SnakeGame::sendReceiveScore() //funkcja wymieniająca wyniki graczy z serwe
         std::cout << "problem z przeslaniem wyniku gracza: " << playerScore<<std::endl;
     }
     else { 
-        tcpSocket.send(&playerScore, sizeof(int));
-        std::cout << "aktualny wynik gracza: " << playerScore << std::endl;
+        std::cout << "Wynik gracza: " << playerScore << std::endl;
     }
 
 
     if (tcpSocket.receive(&enemyScore,sizeof(enemyScore),receivedSize)!=sf::Socket::Done)
     {
-        std::cout << "problem z odebraniem wyniku gracza, aktualny wynik przeciwnika: " << enemyScore << std::endl;
+        std::cout << "problem z odebraniem wyniku gracza, wynik przeciwnika: " << enemyScore << std::endl;
     }
     else { 
-        tcpSocket.receive(&enemyScore, sizeof(enemyScore), receivedSize);
-        std::cout<<"aktualny wynik przeciwnika: "<<enemyScore<<std::endl;
+        std::cout<<"Wynik przeciwnika: "<<enemyScore<<std::endl;
     }
 }
 
@@ -157,10 +158,12 @@ void SnakeGame::run() {
                     window.close();
                 }
             }
+
             if (gamePaused == true)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 sendReceiveScore();
+                updateScore();
+                gameOver();
             }
             else
             {
@@ -170,7 +173,7 @@ void SnakeGame::run() {
                 render();
                 sendReceiveScore();
                 updateScore();
-                //std::this_thread::sleep_for(std::chrono::milliseconds(40));
+                std::this_thread::sleep_for(std::chrono::milliseconds(40));
             }
         }
 }
@@ -183,7 +186,7 @@ void SnakeGame::updateScore()
 
 void SnakeGame::gameOver()
 {
-    gamePaused = true;
+    gamePaused = true; //zatrzymanie gry
     gameOverText.setFont(font);
     gameOverText.setCharacterSize(40);
     gameOverText.setFillColor(sf::Color::White);
@@ -245,7 +248,6 @@ void SnakeGame::update() {
 
         generateFood();
         playerScore++; //dodanie punktów
-        updateScore();
     }
     else {
         // Usunięcie ostatniego segmentu węża
@@ -253,7 +255,6 @@ void SnakeGame::update() {
     }
     if (checkCollision()) {
         // Zderzenie z samym sobą - koniec gry
-        window.clear();
         gameOver();
     }
 }
@@ -315,27 +316,30 @@ bool SnakeGame::checkCollision() {
 
 int main(int argc, char** argv)
 {
-    sf::IpAddress serverIp = "83.22.157.9";
-    int serverPort = 1202;
 
 Reconnect:// Ustanawianie połączenia z serwerem
-    while (tcpSocket.connect(serverIp, serverPort) != sf::Socket::Done)
+    std::cout << "Laczenie z serwerem: " << serverIp << ":" << serverPort << std::endl;
+    while (true)
     {
-
-            std::cout << "nie udalo polaczyc sie z serwerem...\n";
-            //std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
+        if (tcpSocket.connect(serverIp, serverPort) == sf::Socket::Done)
+        {
+            std::cout << "Polaczenie udane...\n";
+            break;
+        }
+        else
+        {
+            std::cout << "Nie udalo polaczyc sie z serwerem...\n";
+            std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
+        }
     }
-    std::cout << "Polaczenie udane...\n";
 
     std::string message = "Client coneccted!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
     do
     {
-        short t = 0;
-        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done && t <= 15) {
+        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done) {
             // Obsługa błędu wysyłania danych
             std::cout << "blad polaczenia...\n" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2)); 
-            t++;
         }
         else if(tcpSocket.send(message.c_str(), message.size() + 1) == sf::Socket::Done){ 
             break; //wyjscie z petli
