@@ -7,6 +7,9 @@
 #include <chrono>
 #include <thread>
 
+sf::IpAddress serverIp = "192.168.1.20";
+int serverPort = 20202;
+
 //GAME SETS6
 const int windowWidth = 1200;
 const int windowHeight = 800;
@@ -168,7 +171,7 @@ void SnakeGame::run() {
                 sendReceiveScore();
                 updateScore();
                 //sendReceiveGameOver();
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
 }
@@ -318,8 +321,6 @@ int main(int argc, char** argv)
 reconnect:
 
     // Ustanawianie połączenia z serwerem
-    sf::IpAddress serverIp = "192.168.1.20"; 
-    int serverPort = 202012;
 
     if (tcpSocket.connect(serverIp, serverPort) != sf::Socket::Done) { // Obsługa błędu połączenia
    
