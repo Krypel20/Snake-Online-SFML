@@ -1,6 +1,5 @@
 ﻿#include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
-#include <Windows.h> //only for Sleep() in main()
 #include <iostream>
 #include <list>
 #include <random>

@@ -71,12 +71,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>D:\Piotrek\Coding\SFML-2.5.1\include;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Piotrek\Coding\SFML-2.5.1\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\piotr\OneDrive\Pulpit\Coding\SFML-2.5.1\include;C:\Users\piotr\OneDrive\Pulpit\Coding\SDLProject\SDL2\include;D:\Piotrek\Coding\SFML-2.5.1\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\piotr\OneDrive\Pulpit\Coding\SFML-2.5.1\lib;C:\Users\piotr\OneDrive\Pulpit\Coding\SDLProject\SDL2\lib\x64;D:\Piotrek\Coding\SFML-2.5.1\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>D:\Piotrek\Coding\SFML-2.5.1\include;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Piotrek\Coding\SFML-2.5.1\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\piotr\OneDrive\Pulpit\Coding\SFML-2.5.1\include;D:\Piotrek\Coding\SFML-2.5.1\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\piotr\OneDrive\Pulpit\Coding\SFML-2.5.1\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
