@@ -1,21 +1,28 @@
 ﻿#include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
-#include <Windows.h> //only for Sleep() in main()
 #include <iostream>
 #include <list>
 #include <random>
 #include <chrono>
 #include <thread>
 
+sf::IpAddress serverIp = "83.27.209.62"; //ip serwera
+int serverPort = 20202;
+
 //GAME SETS
 const int windowWidth = 1200;
-const int windowHeight = 800;
+const int windowHeight = 900;
 const int blockSize = 20;
+const int frameLimit = 55;
 const sf::Color backgroundColor = sf::Color::Black;
 const sf::Color snakeColor = sf::Color::Green;
 const sf::Color foodColor = sf::Color::Red;
+float deltaT;
+sf::Clock gameClock;
 sf::TcpSocket tcpSocket;
-int LocalPoints;
+sf::RectangleShape snakeShape(sf::Vector2f(blockSize, blockSize)); //wąż
+bool isGameOver;
+bool gameStarted;
 
 struct SnakeSegment {
     int x;
@@ -28,16 +35,28 @@ public:
     void run();
     void updateScore();
     void gameOver();
-    int score; //zmienna do przechowywania aktualnego wyniku
-    int score2;
+    void gameStartProcedure();
+    bool gameStart();
+    int P1Score; //zmienna do przechowywania aktualnego wyniku
+    int P2Score;
+    bool isGamePaused;
+    bool enemyGameOver;
 
 private:
     void handleInput();
     void update();
+    void gameInfo();
     void render();
     void generateFood();
     bool checkCollision();
-    void sendReciveInfo();
+    void receiveScore();
+    void sendScore();
+    void sendGameOver(); 
+    void receiveGameOver();
+    void prtinGameOver();
+    void receiveDecision();
+    void sendDecision();
+    bool isPlayerAlreadyWinning();
 
     sf::RenderWindow window;
     std::list<SnakeSegment> snake;
@@ -48,9 +67,13 @@ private:
     sf::Font font; // czcionka do wyświetlania tekstu
     sf::Text scoreText; // tekst wyświetlający aktualny wynik
     sf::Text gameOverText; // tekst wyświetlający koniec gry i punkty graczy
+    sf::Text gameInfoText;
+    sf::Text gameStartText;
 };
 
-SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake Game - Piotr Krypel") {
+SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake Game Online - Piotr Krypel") 
+{
+    window.setFramerateLimit(frameLimit);
     head.x = windowWidth / 2;
     head.y = windowHeight / 2;
     snake.push_front(head);
@@ -63,90 +86,184 @@ SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake
         std::cout << "Blad: nie udalo się zaladowac czcionki!" << std::endl;
     }
 
-    score = 0;
-    score2 = 0;
-    scoreText.setFont(font);
-    scoreText.setCharacterSize(22);
-    scoreText.setFillColor(sf::Color::White);
-    scoreText.setPosition(10, 10);
+    isGamePaused = false;
+    enemyGameOver = false;
+    P1Score = 0;
+    P2Score = 0;
 }
-
-void SnakeGame::sendReciveInfo()
+bool SnakeGame::isPlayerAlreadyWinning()
 {
-    ///* klasa Packet ułatwia wysyłanie wiadomosci do serwera dzięki automatycznej obsłudze konwersji pakietu sf::Packet 
-    //na dane binarne które mogą być przesłane przez gniazdo. */
-    //sf::Packet myScore; //wynik gracza
-    //sf::Packet enemyScore; //wynik przeciwnika
-    //myScore << score; //Przekonwertowanie wyniku (int) na wynik (Packet)
+    if (P2Score < P1Score)
+    {
+        return true;
+    }
+    else return false;
+}
+
+void SnakeGame::gameStartProcedure()
+{
+    gameStartText.setFont(font);
+    gameStartText.setCharacterSize(60);
+    gameStartText.setFillColor(sf::Color::White);
+    gameStartText.setPosition(windowWidth / 2 - 465, windowHeight / 2);
+    gameOverText.setString("Oczekiwanie na gotowość graczy...\nWciśnij Spacje by rozpocząć");
+    window.draw(gameStartText);
+    gameStartText.setCharacterSize(80);
+    for(int i=3;i>=1;--i) 
+    {
+        gameStartText.setString(std::to_string(i));
+        sf::sleep(sf::seconds(1));
+    }
+    gameOverText.setString("");
+}
+
+bool SnakeGame::gameStart()
+{
+    return true;
+}
+
+void SnakeGame::receiveScore()
+{
     std::size_t receivedSize;
-
-    if (tcpSocket.send(&score, sizeof(int)) != sf::Socket::Done)
+    tcpSocket.setBlocking(false); //!!!
+    if (tcpSocket.receive(&P2Score, sizeof(int), receivedSize) == sf::Socket::Done)
     {
-        std::cout << "problem z przeslaniem wyniku gracza: " << score<<std::endl;
-    }
-    else { 
-        tcpSocket.send(&score, sizeof(int));
-        std::cout << "aktualny wynik gracza: " << score << std::endl;
-    }
-
-
-    if (tcpSocket.receive(&score2,sizeof(score2),receivedSize)!=sf::Socket::Done)
-    {
-        std::cout << "problem z odebraniem wyniku gracza, aktualny wynik przeciwnika: " << score2 << std::endl;
-    }
-    else { 
-        tcpSocket.receive(&score2, sizeof(score2), receivedSize);
-        std::cout<<"aktualny wynik przeciwnika: "<<score2<<std::endl;
+        std::cout << "Wynik przeciwnika: " << P2Score << std::endl;
     }
 }
 
-void SnakeGame::run() {
-    sf::Clock clock;
-    float deltaTime;
+void SnakeGame::sendScore() //funkcja wymieniająca wyniki graczy z serwerem
+{
+    if (tcpSocket.send(&P1Score, sizeof(int)) == sf::Socket::Done)
+    {
+        std::cout << "Twoj wynik: " << P1Score << std::endl;
+    }
+}
 
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
+void SnakeGame::receiveGameOver() 
+{
+    tcpSocket.setBlocking(false);
+    std::size_t receivedSize;
+    std::string message;
+    if (tcpSocket.receive(&message[0], message.size(), receivedSize) == sf::Socket::Done)
+    {
+        if (message == "gameover")
+        {
+            std::cout << "Przeciwnik przegral, odebrano wiadomosc\n" << std::endl;
+            if (!isPlayerAlreadyWinning())
+            {
+                enemyGameOver = true;
+            }
+            else gameOver();
+        }
+    }
+    /*else { std::cout << "nic " << message<<std::endl; return; }*/
+}
+
+void SnakeGame::sendGameOver()
+{
+        std::string message = "gameover";
+        if (tcpSocket.send(message.c_str(), message.size() + 1) == sf::Socket::Done)
+        {
+            std::cout << "Gracz przegral, wiadomosc wyslana: " <<message<< std::endl;
+        }
+        else { std::cout << "Gracz przegral, nie udalo sie wyslac wiadomosci: " << message << std::endl; }
+}
+
+void SnakeGame::run() 
+{
+        while (window.isOpen()) 
+        {
+            sf::Event event;
+            if (gameStart() == true)
+            {
+                deltaT = gameClock.restart().asSeconds();
+                while (window.pollEvent(event))
+                {
+                    if (event.type == sf::Event::Closed) {
+                        window.close();
+                    }
+                }
+                if (isGameOver) //koniec gry dla gracza
+                {
+                    render();
+                    receiveScore();
+                    updateScore();
+                    sendGameOver();
+                    prtinGameOver();
+                }
+                else if (enemyGameOver) //koniec gry dla przeciwnika ale gracz dalej moze zdobywac punkty gdy ma ich mniej
+                {
+                    render();
+                    handleInput();
+                    update();
+                    updateScore();
+                    gameInfo();
+                }
+                else if (isGamePaused && !isGameOver) // gra jest zatrzymana ale nie ma końca gry
+                {
+                    gameInfo();
+                    //funkcja startu
+                }
+                else //Obaj gracze grają i zdobywają punkty
+                {
+                    receiveGameOver();
+                    render();
+                    handleInput();
+                    update();
+                    receiveScore();
+                    updateScore();
+                    gameInfo();
+                }
             }
         }
-        deltaTime = clock.restart().asSeconds();
-        handleInput();
-        update();
-        render();
-        sendReciveInfo();
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
-    }
 }
 
 void SnakeGame::updateScore() 
 {
     // Aktualizacja tekstu wyświetlającego aktualny wynik
-    scoreText.setString("Punkty: " + std::to_string(score));
+    scoreText.setFont(font);
+    scoreText.setCharacterSize(22);
+    scoreText.setFillColor(sf::Color::White);
+    scoreText.setPosition(10, 10);
+    scoreText.setString("Gracz: " + std::to_string(P1Score)+ "\nPrzeciwnik: "+std::to_string(P2Score));
+}
+
+void SnakeGame::gameInfo()
+{
+    gameInfoText.setFont(font);
+    gameInfoText.setCharacterSize(22);
+    gameInfoText.setFillColor(sf::Color::White);
+    gameInfoText.setPosition(10, 60);
+    gameInfoText.setString("dt: " + std::to_string(deltaT));
+}
+
+void SnakeGame::prtinGameOver()
+{
+    gameOverText.setFont(font);
+    gameOverText.setCharacterSize(40);
+    gameOverText.setFillColor(sf::Color::Yellow);
+    gameOverText.setPosition((windowWidth - windowHeight) / 2, windowHeight / 2);
+    if (P1Score > P2Score) {
+        gameOverText.setString("WYGRALES!\nGracz: " + std::to_string(P1Score) + "\nPrzeciwnik: " + std::to_string(P2Score));
+    }
+    else if (P1Score == P2Score) {
+        gameOverText.setString("REMIS!\nGracz: " + std::to_string(P1Score) + "\nPrzeciwnik: " + std::to_string(P2Score));
+    }
+    else {
+        gameOverText.setString("PRZEGRALES!\nGracz: " + std::to_string(P1Score) + "\nPrzeciwnik: " + std::to_string(P2Score));
+    }
 }
 
 void SnakeGame::gameOver()
 {
-    gameOverText.setFont(font);
-    gameOverText.setCharacterSize(40);
-    gameOverText.setFillColor(sf::Color::White);
-    gameOverText.setPosition(windowWidth/2-465,windowHeight/2);
-
-    if (score > score2){
-        gameOverText.setString("WYGRALES! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
-    }
-    else if(score==score2){
-        gameOverText.setString("REMIS! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
-    }
-    else
-    {
-        gameOverText.setString("PRZEGRALES! Twoje punkty: " + std::to_string(score) + " Punkty przeciwnika: " + std::to_string(score2));
-    }
+    isGameOver = true; 
+    isGamePaused = true; //zatrzymanie gry
+    prtinGameOver();
 }
 
-void SnakeGame::handleInput() {
-
+void SnakeGame::handleInput() 
+{
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && currentDirection != Direction::Down) {
         nextDirection = Direction::Up;
     }
@@ -161,69 +278,79 @@ void SnakeGame::handleInput() {
     }
 }
 
-void SnakeGame::update() {
-    // Aktualizacja kierunku na podstawie następnego kierunku
-    currentDirection = nextDirection;
-    window.draw(scoreText);
-    updateScore();
+void SnakeGame::update() 
+{
+    if (!isGamePaused)
+    {
+        // Aktualizacja kierunku na podstawie następnego kierunku
+        currentDirection = nextDirection;
 
-    // Aktualizacja pozycji głowy węża na podstawie kierunku
-    head = snake.front();
-    switch (currentDirection) {
-    case Direction::Up:
-        head.y -= blockSize;
-        break;
-    case Direction::Down:
-        head.y += blockSize;
-        break;
-    case Direction::Left:
-        head.x -= blockSize;
-        break;
-    case Direction::Right:
-        head.x += blockSize;
-        break;
-    }
+        // Aktualizacja pozycji głowy węża na podstawie kierunku
+        head = snake.front();
+        switch (currentDirection) {
+        case Direction::Up:
+            head.y -= blockSize - blockSize/2;
+            break;
+        case Direction::Down:
+            head.y += blockSize - blockSize / 2;
+            break;
+        case Direction::Left:
+            head.x -= blockSize - blockSize / 2;
+            break;
+        case Direction::Right:
+            head.x += blockSize - blockSize / 2;
+            break;
+        }
 
-    // Dodanie nowej głowy węża na początek listy
-    snake.push_front(head);
-    // Sprawdzenie kolizji z jedzeniem oraz z samym sobą
-    if (head.x == food.getPosition().x && head.y == food.getPosition().y) {
-
-        generateFood();
-        score++; //dodanie punktów
-        updateScore();
-    }
-    else {
-        // Usunięcie ostatniego segmentu węża
-        snake.pop_back();
-    }
-    if (checkCollision()) {
-        // Zderzenie z samym sobą - koniec gry
-        window.clear();
-        gameOver();
+        // ruch wężą przed siebie
+        snake.push_front(head);
+        // Sprawdzenie kolizji z jedzeniem oraz z samym sobą
+        if (head.x == food.getPosition().x && head.y == food.getPosition().y ||
+            (head.x - blockSize / 2 == food.getPosition().x && head.y + blockSize / 2 == food.getPosition().y ) ||
+            (head.x + blockSize / 2 == food.getPosition().x && head.y - blockSize / 2 == food.getPosition().y ))
+        {
+            generateFood();
+            P1Score++; //dodanie punktów
+            sendScore();//wysłanie aktualnego wyniku na serwer
+            for (int i = 0; i < 2; ++i)
+            {
+                SnakeSegment tail = snake.back(); // Pobranie aktualnego ogona węża
+                SnakeSegment newTail;
+                newTail.x = tail.x;
+                newTail.y = tail.y;
+                snake.push_back(newTail);
+            }
+        }
+        else {
+            snake.pop_back();
+        }
+        if (checkCollision()) 
+        {
+            gameOver(); // Zderzenie z samym sobą - koniec gry
+            sendGameOver();
+        }
     }
 }
-
-void SnakeGame::render() {
+void SnakeGame::render() 
+{
     window.clear(backgroundColor);
-
     // Rysowanie węża
     for (const auto& segment : snake) {
-        sf::RectangleShape segmentShape(sf::Vector2f(blockSize, blockSize));
-        segmentShape.setPosition(segment.x, segment.y);
-        segmentShape.setFillColor(snakeColor);
-        window.draw(segmentShape);
+        snakeShape.setPosition(segment.x, segment.y);
+        snakeShape.setFillColor(snakeColor);
+        window.draw(snakeShape);
     }
 
     // Rysowanie jedzenia
     window.draw(food);
     window.draw(scoreText);
+    window.draw(gameInfoText);
     window.draw(gameOverText);
     window.display();
 }
 
-void SnakeGame::generateFood() {
-
+void SnakeGame::generateFood() 
+{
     // Generowanie nowego jedzenia na losowej pozycji
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -237,8 +364,8 @@ void SnakeGame::generateFood() {
     food.setFillColor(foodColor);
 }
 
-bool SnakeGame::checkCollision() {
-
+bool SnakeGame::checkCollision() 
+{
     // Sprawdzenie kolizji głowy węża z ciałem lub ścianami
     int headX = head.x;
     int headY = head.y;
@@ -258,65 +385,61 @@ bool SnakeGame::checkCollision() {
 }
 
 
-
 int main(int argc, char** argv)
 {
-
-reconnect:
-
+Reconnect:
     // Ustanawianie połączenia z serwerem
-    sf::IpAddress serverIp = "192.168.1.20"; 
-    int serverPort = 202012;
-
-    if (tcpSocket.connect(serverIp, serverPort) != sf::Socket::Done) { // Obsługa błędu połączenia
-   
-        std::cout << "nie udalo polaczyc sie z serwerem...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
-        goto reconnect;
+    std::cout << "Laczenie z serwerem: " << serverIp << ":" << serverPort << std::endl;
+    while (true)
+    {
+        if (tcpSocket.connect(serverIp, serverPort) == sf::Socket::Done)
+        {
+            std::cout << "Polaczenie udane...\n";
+            break;
+        }
+        else
+        {
+            std::cout << "Nie udalo polaczyc sie z serwerem...\n";
+            std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
+        }
     }
 
-
-    // Potwierdzenie połączenia z serwerem
-    std::cout << "Polaczenie udane!";
-    std::string message = "Client coneccted!\n"; // Przykładowa wiadomość
+    std::string message = "!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
     do
     {
-        short t = 0;
-        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done && t <= 15) {
+        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done) {
             // Obsługa błędu wysyłania danych
-            std::cout << "Connection error..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // program czeka 1 s
-            t++;
+            std::cout << "blad polaczenia...\n" << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2)); 
         }
         else if(tcpSocket.send(message.c_str(), message.size() + 1) == sf::Socket::Done){ 
             break; //wyjscie z petli
         }
         else { 
-            return -1; // Zakończenie programu
+            std::cout << "-------FATAL ERROR-------- \n" << std::endl;
+            tcpSocket.disconnect();
+                return -1; // Zakończenie programu
         } 
     } while (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done);
 
-
     // Sprawdzenie czy klient moze odebrac dane
-    char recMsg[512]; 
+    char recMsg[512];
     std::size_t received;
     if (tcpSocket.receive(recMsg, sizeof(recMsg), received) != sf::Socket::Done) {
         // Obsługa błędu odbierania danych
         // np. wypisanie komunikatu o błędzie lub zakończenie gry
-        std::cout << "Nie udało się odebrać danych od serwera.\n" << std::endl;
+        std::cout << "Nie udalo się odebrac danych od serwera.\n" << std::endl;
+        tcpSocket.disconnect();
         return -1; // Zakończenie programu z kodem błędu
     }
     // Wyświetlenie otrzymanych danych jako test
-    std::cout << "Otrzymane dane od serwera: " << recMsg << "\n"; 
+    /*std::cout << "Otrzymane dane od serwera: " << recMsg << "\n";*/
 
     //inicjalizacja okna i silnika gry
     std::cout << "--------------------Rozpoczecie gry!--------------------\n";
-    message = "START";
-    tcpSocket.send(message.c_str(), message.size());
     SnakeGame game;
     game.run();
-    /*tcpSocket.close();*/
+    std::cout << "--------------------Gra sie zakonczyla!-----------------\n" << std::endl;
+    tcpSocket.disconnect();
     return 0;
 }
-
-//funkcje obslugujace przesyl danych klient <-> serwer
