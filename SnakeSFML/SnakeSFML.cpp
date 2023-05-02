@@ -1,8 +1,9 @@
-﻿#define WIN32_LEAN_AND_MEAN
+﻿#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Network.hpp>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <iostream>
 #include <list>
 #include <random>
@@ -10,22 +11,10 @@
 #include <thread>
 
 #pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-
-sf::IpAddress serverIp = "83.27.209.62"; //ip serwera
+//sf::IpAddress serverIp = "83.27.209.62"; //ip serwera
+const char DEFAULT_PORT[] = "20202";
 int serverPort = 20202;
-
-//SERVER CONNECTION CODE
-//WSADATA wsaData;
-//struct addrinfo* result = NULL,
-//    * ptr = NULL,
-//    hints;
-//
-//ZeroMemory(&hints, sizeof(hints));
-//hints.ai_family = AF_UNSPEC;
-//hints.ai_socktype = SOCK_STREAM;
-//hints.ai_protocol = IPPROTO_TCP;
+const char serverIp[] = "217.97.70.17";
 
 //GAME SETS
 const int windowWidth = 980;
@@ -37,8 +26,8 @@ const sf::Color snakeColor = sf::Color::Green;
 const sf::Color foodColor = sf::Color::Red;
 float deltaT;
 sf::Clock gameClock;
-sf::TcpSocket tcpSocket;
-//SOCKET tcpSocket = INVALID_SOCKET;
+//sf::TcpSocket tcpSocket;
+SOCKET tcpSocket = INVALID_SOCKET;
 sf::RectangleShape snakeShape(sf::Vector2f(blockSize, blockSize)); //wąż
 bool isGameOver;
 bool gameStarted;
@@ -144,9 +133,16 @@ void SnakeGame::runGame()
             if (ispressed.type == sf::Event::KeyPressed)
             {
                 std::cout << "KLAWISZ ZOSTAL WCISNIETY\n";
-                gameStartText.setString("");
                 playerReady = true;
-                enemyReady = true;
+                sendDecision();
+            }
+        }
+
+        sf::Event event; //zrobic z tego funkcje
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed) {
+                window.close();
             }
         }
     }
@@ -203,7 +199,7 @@ void SnakeGame::runGame()
                 receiveData();
                 updateScore();
                 gameInfo();
-                if (P2Score < P1Score && enemyGameOver) gameOver();
+                if (P2Score < P1Score && enemyGameOver) { gameOver();}
             }
     }
 }
@@ -249,7 +245,7 @@ void SnakeGame::gameOver()
     isGameOver = true;
     isGamePaused = true; //zatrzymanie gry
     printGameOver();
-    //sendGameOver();
+    sendGameOver();
 }
 
 void SnakeGame::handleInput()
@@ -386,33 +382,54 @@ bool SnakeGame::bothReady()
     else return false;
 }
 
-//void connectToServer()
-//{
-//    // Ustanawianie połączenia z serwerem
-//    std::cout << "Laczenie z serwerem: " << serverIp << ":" << serverPort << std::endl;
-//    while (true)
-//    {
-//        if (tcpSocket.connect(serverIp, serverPort) == sf::Socket::Done)
-//        {
-//            std::cout << "Polaczenie udane...\n";
-//            break;
-//        }
-//        else
-//        {
-//            std::cout << "Nie udalo polaczyc sie z serwerem...\n";
-//            std::this_thread::sleep_for(std::chrono::seconds(1)); // program czeka 1 s
-//        }
-//    }
-//}
-
 void connectToServer()
 {
-    // Ustanawianie połączenia z serwerem
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(serverPort);
+    serverAddr.sin_addr.s_addr = inet_addr(serverIp);
+
+    WSADATA wsaData;
+    struct addrinfo* result = NULL,
+        * ptr = NULL,
+        hints;
+
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    int iResult;
+
+    // Initialize Winsock
+    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed with error: %d\n", iResult);
+        return ;
+    }
+
+    iResult = getaddrinfo(serverIp, DEFAULT_PORT, &hints, &result);
+    if (iResult != 0) {
+        printf("getaddrinfo failed with error: %d\n", iResult);
+        WSACleanup();
+        return;
+    }
+
+    for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
+
+        // Create a SOCKET for connecting to server
+        tcpSocket = socket(ptr->ai_family, ptr->ai_socktype,
+            ptr->ai_protocol);
+        if (tcpSocket == INVALID_SOCKET) {
+            printf("socket failed with error: %ld\n", WSAGetLastError());
+            WSACleanup();
+            return;
+        }
+    }
+   
     std::cout << "Laczenie z serwerem: " << serverIp << ":" << serverPort << std::endl;
     while (true)
     {
-        if (tcpSocket.connect(serverIp, serverPort) == sf::Socket::Done)
-        {
+        if (connect(tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
             std::cout << "Polaczenie udane...\n";
             break;
         }
@@ -424,37 +441,29 @@ void connectToServer()
     }
 }
 
-
 void checkConnection()
 {
     std::string message = "test!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
-    do
+    while(true)
     {
-        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done) 
+        if (send(tcpSocket, message.c_str(), message.size() + 1, 0) == SOCKET_ERROR)
         {
             std::cout << "blad polaczenia...\n" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
         }
-        else if (tcpSocket.send(message.c_str(), message.size() + 1) == sf::Socket::Done) {
-            break;
-        }
-        else {
-            std::cout << "-------ERROR-------- \n" << std::endl;
-            tcpSocket.disconnect();
-            return; 
-        }
-    } while (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done);
-
+        else break;
+    }
+    std::cout << "sprawdzanie polaczenia z drugim klientem\n";
     // Sprawdzenie czy klient moze odebrac dane
     char recMsg[512];
-    std::size_t received;
-    if (tcpSocket.receive(recMsg, sizeof(recMsg), received) != sf::Socket::Done) {
-
-        std::cout << "Nie udało się odebrać danych od serwera.\n" << std::endl;
-        tcpSocket.disconnect();
+    if (recv(tcpSocket, recMsg, sizeof(recMsg), 0) == SOCKET_ERROR) {
+        std::cout << "Nie udalo sie odebrac danych od serwera.\n" << std::endl;
+        closesocket(tcpSocket);
         return;
     }
+    else { std::cout << "odebrano wiadomosc testowa!\n"; return; }
 }
+
 
 int main(int argc, char** argv)
 {
@@ -464,67 +473,70 @@ int main(int argc, char** argv)
     SnakeGame game;
     game.runGame();
     std::cout << "--------------------Program zostal zamkniety-----------------\n";
-    tcpSocket.disconnect();
+    closesocket(tcpSocket);
+    WSACleanup();
     return 0;
 }
 
-//void SnakeGame::receiveData()
-//{
-//    std::size_t receivedSize;
-//    char receivedData[512];
-//    int score;
-//    std::string message;
-//    tcpSocket.setBlocking(false); //!!!
-//
-//    if (tcpSocket.receive(&receivedData, sizeof(receivedData), receivedSize) == sf::Socket::Done)
-//    {
-//        if (std::isdigit(receivedData[0]))
-//        {
-//            std::cout << "otrzymano (int)\n";
-//            score = std::stoi(receivedData);
-//            P2Score = score;
-//            std::cout << "Wynik przeciwnika: " << P2Score << std::endl;
-//        }
-//        if (std::isalpha(receivedData[0]))
-//        {
-//            std::cout << "otrzymano (string)\n";
-//            if (std::string(receivedData) == "gameover")
-//            {
-//                enemyGameOver = true;
-//            }
-//            if (std::string(receivedData) == "ready")
-//            {
-//                enemyReady = true;
-//            }
-//        }
-//    }
-//}
 
 void SnakeGame::receiveData()
 {
-    std::size_t receivedSize;
-    tcpSocket.setBlocking(false); //!!!
-
-    if (tcpSocket.receive(&P2Score, sizeof(int), receivedSize) == sf::Socket::Done)
-    {
-        std::cout << "Wynik przeciwnika: " << P2Score << std::endl;
-    }
-}
-
-void SnakeGame::receiveGameOver()
-{
-    tcpSocket.setBlocking(false);
-    std::size_t receivedSize;
+    int receivedSize;
+    char receivedData[512];
+    int score;
     std::string message;
-    if (tcpSocket.receive(&message, sizeof(message), receivedSize) == sf::Socket::Done && message == "gameover")
+
+    // Utworzenie zbioru deskryptorów gniazd sieciowych
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(tcpSocket, &set);
+
+    // Ustawienie czasu oczekiwania na dane gotowe do odczytu
+    timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+
+    // Sprawdzenie, czy istnieją dane gotowe do odczytu
+    int result = select(0, &set, NULL, NULL, &timeout);
+    if (result == SOCKET_ERROR) {
+        std::cout << "Błąd w funkcji select(): " << WSAGetLastError() << std::endl;
+        return;
+    }
+    else if (result == 0) {
+        // Brak danych gotowych do odczytu
+        return;
+    }
+    // Odebranie wiadomości
+    if (recv(tcpSocket, (char*)&receivedData, sizeof(int), 0) > 0)
     {
-        std::cout << "Przeciwnik przegral: " << P2Score << std::endl;
+        if (std::isdigit(receivedData[0]))
+        {
+            P2Score = std::stoi(receivedData);
+            std::cout << "Wynik przeciwnika: " << P2Score << std::endl;
+        }
+        if (std::isalpha(receivedData[0]))
+        {
+            std::string receivedString(receivedData);
+            receivedString.resize(strnlen_s(receivedData, 2));
+
+            if (receivedString == "GO")
+            {
+                std::cout << "Przeciwnik przegral\n";
+                enemyGameOver = true;
+            }
+            if (receivedString == "RD")
+            {
+                std::cout << "Przeciwnik gotowy\n";
+                enemyReady = true;
+            }
+        }
     }
 }
 
-void SnakeGame::sendScore() //funkcja wymieniająca wyniki graczy z serwerem
+void SnakeGame::sendScore()
 {
-    if (tcpSocket.send(&P1Score, sizeof(int)) == sf::Socket::Done)
+    std::string message = std::to_string(P1Score);
+    if (send(tcpSocket, message.c_str(), message.length(), 0) > 0)
     {
         std::cout << "Twoj wynik: " << P1Score << std::endl;
     }
@@ -532,13 +544,27 @@ void SnakeGame::sendScore() //funkcja wymieniająca wyniki graczy z serwerem
 
 void SnakeGame::sendGameOver()
 {
-    if (isGameOver == true)
+    if (isGameOver)
     {
-        std::string message = "gameover";
-        if (tcpSocket.send(message.c_str(), message.size() + 1) != sf::Socket::Done)
+        std::string message = "GO"; //GameOver
+        if (send(tcpSocket, message.c_str(), message.length(), 0) != SOCKET_ERROR)
         {
+            std::cout << "Przegrales\n" << std::endl;
+        }
+        else {
             std::cout << "problem z wysłaniem prosby o zakonczenie gry\n" << std::endl;
         }
-        else { std::cout << "Przegrales\n"<< std::endl; }
+    }
+}
+
+void SnakeGame::sendDecision()
+{
+    std::string message = "RD"; //Ready
+    if (send(tcpSocket, message.c_str(), message.length(), 0) != SOCKET_ERROR)
+    {
+        std::cout << "jestes gotowy do gry\n" << std::endl;
+    }
+    else {
+        std::cout << "problem z wysłaniem gotowosci\n" << std::endl;
     }
 }
