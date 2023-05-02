@@ -1,4 +1,4 @@
 # SnakeSFML
-Simple Snake game project based on SFML libary and winsock server connection. 
+Simple Snake game based on SFML libary and winsock client-server connection. 
 
 *Still in progress*
