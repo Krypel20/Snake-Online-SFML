@@ -467,15 +467,15 @@ void checkConnection()
 
 int main(int argc, char** argv)
 {
-    std::cout << "--------------------Rozpoczecie programu--------------------\n";
+    std::cout << "---------Rozpoczecie programu----------\n";
     connectToServer();
     checkConnection();
     SnakeGame game;
     game.runGame();
-    std::cout << "--------------------Program zostal zamkniety-----------------\n";
+    std::cout << "---------Program zostal zamkniety----------\n";
     closesocket(tcpSocket);
     WSACleanup();
-    return 0;
+    return 0;//edit
 }
 
 
