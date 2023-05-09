@@ -12,11 +12,12 @@
 #pragma comment (lib, "Ws2_32.lib")
 const char DEFAULT_PORT[] = "20202";
 int serverPort = 20202;
-const char serverIp[] = "83.27.9.159";
+const char serverIp[] = "83.27.44.224";
 
 //GAME SETS
-const int windowWidth = 980;
-const int windowHeight = 660;
+const int windowWidth = 1000;
+const int windowHeight = 800;
+sf::View v;
 const int blockSize = 20;
 const int frameLimit = 55;
 const sf::Color backgroundColor = sf::Color::Black;
@@ -74,7 +75,7 @@ private:
     sf::RenderWindow window;
     std::list<SnakeSegment> snake;
     SnakeSegment head;
-    sf::RectangleShape food;
+    sf::CircleShape food;
     enum Direction { Up, Down, Left, Right } currentDirection;
     Direction nextDirection;
     sf::Font font; // czcionka do wyświetlania tekstu
@@ -84,8 +85,9 @@ private:
     sf::Text gameStartText;
 };
 
-SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake Game Online - Piotr Krypel")
+SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake Game Online - Piotr Krypel", sf::Style::Default)
 {
+        v.getViewport();
         window.clear(backgroundColor);
         window.setFramerateLimit(frameLimit);
         renderObjects();
@@ -445,9 +447,12 @@ void SnakeGame::generateFood()
     int foodX = disX(gen) * blockSize;
     int foodY = disY(gen) * blockSize;
 
-    food.setSize(sf::Vector2f(blockSize, blockSize));
-    food.setPosition(foodX, foodY);
+    /*food.setSize(sf::Vector2f(blockSize, blockSize));*/
+    food.setOutlineThickness(0.5f);
+    food.setRadius(float(blockSize/2));
     food.setFillColor(foodColor);
+
+    food.setPosition(foodX, foodY);
 }
 
 bool SnakeGame::checkCollision()
