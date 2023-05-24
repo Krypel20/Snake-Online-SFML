@@ -12,29 +12,60 @@
 #pragma comment (lib, "Ws2_32.lib")
 const char DEFAULT_PORT[] = "20202";
 int serverPort = 20202;
-const char serverIp[] = "83.27.44.224";
+const char serverIp[] = "83.27.10.12";
 
 //GAME SETS
 const int windowWidth = 1000;
-const int windowHeight = 800;
-sf::View v;
+const int windowHeight = 840;
+const float outlineThickness = 2.5;
 const int blockSize = 20;
 const int frameLimit = 55;
-const sf::Color backgroundColor = sf::Color::Black;
-const sf::Color snakeColor = sf::Color::Green;
+const sf::Color backgroundColor(10,10,10,255);
 const sf::Color foodColor = sf::Color::Red;
 float deltaT;
 sf::Clock gameClock;
 SOCKET tcpSocket = INVALID_SOCKET;
-sf::RectangleShape snakeShape(sf::Vector2f(blockSize, blockSize)); //wąż
 bool isGameOver;
 bool gameStarted;
 
 struct SnakeSegment
 {
     int x, y;
-    sf::RectangleShape segmentRectShape;
-    sf::Color segmentColor; // dodane pole koloru
+    sf::Color segmentColor;
+
+    SnakeSegment(bool isHead = false) :segmentColor(isHead ? sf::Color(30, 205, 0) : sf::Color(253, 230, 0)) {}
+    SnakeSegment(sf::Color color) : segmentColor(color) {}
+};
+
+struct SnakeObject
+{
+    std::string snakeName;
+    SnakeSegment head;
+    std::list<SnakeSegment> body;
+    sf::Color bodyColor;
+    sf::Color headColor;
+    sf::RectangleShape snakeShape;
+    enum Direction { Up, Down, Left, Right } currentDirection;
+    Direction nextDirection;
+
+    SnakeObject() : bodyColor(30,165,0), headColor(253, 230, 0){
+        head = SnakeSegment(true);
+        snakeShape = sf::RectangleShape(sf::Vector2f(blockSize, blockSize));
+        snakeShape.setOutlineThickness(outlineThickness);
+        snakeShape.setOutlineColor(sf::Color::Green);
+        currentDirection = Direction::Up;
+        nextDirection = Direction::Up;
+    }
+
+    SnakeObject(std::string name, sf::Color color): bodyColor(color), headColor(253, 230, 0), snakeName(name) {
+        head = SnakeSegment(true);
+        snakeShape = sf::RectangleShape(sf::Vector2f(blockSize, blockSize));
+        snakeShape.setOutlineThickness(outlineThickness);
+        snakeShape.setOutlineColor(sf::Color::Green);
+        currentDirection = Direction::Up;
+        nextDirection = Direction::Up;
+    }
+    
 };
 
 class SnakeGame {
@@ -47,10 +78,10 @@ public:
     void printGameOver();
     bool isGamePaused;
     bool enemyGameOver;
-    bool enemyReady;
     bool playerReady;
     bool bothReady();
     bool gameStart;
+    bool enemyReady;
 
 private:
     void updateScore();
@@ -72,12 +103,10 @@ private:
 
     int P1Score; //zmienna do przechowywania aktualnego wyniku
     int P2Score;
+
+    SnakeObject playerSnake;
     sf::RenderWindow window;
-    std::list<SnakeSegment> snake;
-    SnakeSegment head;
     sf::CircleShape food;
-    enum Direction { Up, Down, Left, Right } currentDirection;
-    Direction nextDirection;
     sf::Font font; // czcionka do wyświetlania tekstu
     sf::Text scoreText; // tekst wyświetlający aktualny wynik
     sf::Text gameOverText; // tekst wyświetlający koniec gry i punkty graczy
@@ -85,9 +114,8 @@ private:
     sf::Text gameStartText;
 };
 
-SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake Game Online - Piotr Krypel", sf::Style::Default)
+SnakeGame::SnakeGame() : playerSnake(), window(sf::VideoMode(windowWidth, windowHeight), "Snake Game Online - Piotr Krypel", sf::Style::Default)
 {
-        v.getViewport();
         window.clear(backgroundColor);
         window.setFramerateLimit(frameLimit);
         renderObjects();
@@ -102,13 +130,10 @@ SnakeGame::SnakeGame() : window(sf::VideoMode(windowWidth, windowHeight), "Snake
 
 void SnakeGame::renderObjects()
 {
-    snake.clear();
-    head.x = windowWidth / 2;
-    head.y = windowHeight / 2;
-    snake.push_front(head);
-
-    currentDirection = Direction::Up;
-    nextDirection = Direction::Up;
+    playerSnake.body.clear();
+    playerSnake.head.x = windowWidth / 2;
+    playerSnake.head.y = windowHeight / 2;
+    playerSnake.body.push_front(playerSnake.head);
     generateFood();
 }
 
@@ -341,17 +366,17 @@ void SnakeGame::gameOver()
 
 void SnakeGame::handleInput()
 {
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && currentDirection != Direction::Down) {
-        nextDirection = Direction::Up;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && playerSnake.currentDirection != playerSnake.Direction::Down) {
+        playerSnake.nextDirection = playerSnake.Direction::Up;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && currentDirection != Direction::Up) {
-        nextDirection = Direction::Down;
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && playerSnake.currentDirection != playerSnake.Direction::Up) {
+        playerSnake.nextDirection = playerSnake.Direction::Down;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && currentDirection != Direction::Right) {
-        nextDirection = Direction::Left;
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && playerSnake.currentDirection != playerSnake.Direction::Right) {
+        playerSnake.nextDirection = playerSnake.Direction::Left;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && currentDirection != Direction::Left) {
-        nextDirection = Direction::Right;
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && playerSnake.currentDirection != playerSnake.Direction::Left) {
+        playerSnake.nextDirection = playerSnake.Direction::Right;
     }
 }
 
@@ -360,48 +385,49 @@ void SnakeGame::gameUpdate()
     if (!isGamePaused && !isGameOver)
     {
         // Aktualizacja kierunku na podstawie następnego kierunku
-        currentDirection = nextDirection;
+        playerSnake.currentDirection = playerSnake.nextDirection;
 
         // Aktualizacja pozycji głowy węża na podstawie kierunku
-        head = snake.front();
-        switch (currentDirection) {
-        case Direction::Up:
-            head.y -= blockSize - blockSize / 2;
+        playerSnake.head = playerSnake.body.front();
+        switch (playerSnake.currentDirection) {
+        case playerSnake.Direction::Up:
+            playerSnake.head.y -= blockSize - blockSize / 2;
             break;
-        case Direction::Down:
-            head.y += blockSize - blockSize / 2;
+        case playerSnake.Direction::Down:
+            playerSnake.head.y += blockSize - blockSize / 2;
             break;
-        case Direction::Left:
-            head.x -= blockSize - blockSize / 2;
+        case playerSnake.Direction::Left:
+            playerSnake.head.x -= blockSize - blockSize / 2;
             break;
-        case Direction::Right:
-            head.x += blockSize - blockSize / 2;
+        case playerSnake.Direction::Right:
+            playerSnake.head.x += blockSize - blockSize / 2;
             break;
         }
 
         // ruch wężą przed siebie
-        snake.push_front(head);
+        playerSnake.body.push_front(playerSnake.head);
         // Sprawdzenie kolizji z jedzeniem oraz z samym sobą
-        if (head.x == food.getPosition().x && head.y == food.getPosition().y ||
-            (head.x - blockSize / 2 == food.getPosition().x && head.y + blockSize / 2 == food.getPosition().y) ||
-            (head.x + blockSize / 2 == food.getPosition().x && head.y - blockSize / 2 == food.getPosition().y))
+        if (playerSnake.head.x == food.getPosition().x && playerSnake.head.y == food.getPosition().y ||
+            (playerSnake.head.x - blockSize / 2 == food.getPosition().x && playerSnake.head.y + blockSize / 2 == food.getPosition().y) ||
+            (playerSnake.head.x + blockSize / 2 == food.getPosition().x && playerSnake.head.y - blockSize / 2 == food.getPosition().y))
         {
             generateFood();
             P1Score++; //dodanie punktów
             sendScore();//wysłanie aktualnego wyniku na serwer
+
             for (int i = 0; i < 2; ++i)
             {
-                SnakeSegment tail = snake.back(); // Pobranie aktualnego ogona węża
-                SnakeSegment newTail;
+                SnakeSegment tail = playerSnake.body.back(); // Pobranie aktualnego ogona węża
+                SnakeSegment newTail(playerSnake.bodyColor);
                 newTail.x = tail.x;
                 newTail.y = tail.y;
                 // dodanie nowego bloku do węża
-                snake.push_back(newTail);
+                playerSnake.body.push_back(newTail);
             }
         }
         else 
         {
-            snake.pop_back();
+            playerSnake.body.pop_back();
         }
 
         if (checkCollision()) 
@@ -418,13 +444,15 @@ void SnakeGame::render()
     window.draw(gameInfoText);
     gameInfo();
 
-    // Rysowanie węża
-    for (const auto& segment : snake) 
+    // Rysowanie węża gracza
+    for (const auto& segment : playerSnake.body) 
     {
-        snakeShape.setPosition(segment.x, segment.y);
-        snakeShape.setFillColor(snakeColor);
-        window.draw(snakeShape);
+        playerSnake.snakeShape.setPosition(segment.x, segment.y);
+        playerSnake.snakeShape.setFillColor(segment.segmentColor);
+        window.draw(playerSnake.snakeShape);
     }
+
+    //Rysowanie węża przeciwnika
 
     // Rysowanie jedzenia
     if (gameStart)
@@ -448,18 +476,17 @@ void SnakeGame::generateFood()
     int foodY = disY(gen) * blockSize;
 
     /*food.setSize(sf::Vector2f(blockSize, blockSize));*/
-    food.setOutlineThickness(0.5f);
+    food.setOutlineThickness(outlineThickness);
     food.setRadius(float(blockSize/2));
     food.setFillColor(foodColor);
-
     food.setPosition(foodX, foodY);
 }
 
 bool SnakeGame::checkCollision()
 {
     // Sprawdzenie kolizji głowy węża z ciałem lub ścianami
-    int headX = head.x;
-    int headY = head.y;
+    int headX = playerSnake.head.x;
+    int headY = playerSnake.head.y;
 
     // Kolizja ze ścianami
     if (headX < 0 || headX >= windowWidth || headY < 0 || headY >= windowHeight) {
@@ -467,7 +494,7 @@ bool SnakeGame::checkCollision()
     }
 
     // Kolizja z ciałem węża
-    for (auto it = std::next(snake.begin()); it != snake.end(); ++it) {
+    for (auto it = std::next(playerSnake.body.begin()); it != playerSnake.body.end(); ++it) {
         if (headX == it->x && headY == it->y) {
             return true;
         }
