@@ -12,15 +12,16 @@
 #pragma comment (lib, "Ws2_32.lib")
 const char DEFAULT_PORT[] = "20202";
 int serverPort = 20202;
-const char serverIp[] = "83.27.10.12";
+const char serverIp[] = "83.27.194.234";
 
+class SnakeGame;
 //GAME SETS
 const int windowWidth = 1000;
 const int windowHeight = 840;
-const float outlineThickness = 2.5;
+const float outlineThickness = 2;
 const int blockSize = 20;
 const int frameLimit = 55;
-const sf::Color backgroundColor(10,10,10,255);
+const sf::Color backgroundColor(0,0,0);
 const sf::Color foodColor = sf::Color::Red;
 float deltaT;
 sf::Clock gameClock;
@@ -28,28 +29,27 @@ SOCKET tcpSocket = INVALID_SOCKET;
 bool isGameOver;
 bool gameStarted;
 
-struct SnakeSegment
-{
-    int x, y;
-    sf::Color segmentColor;
-
-    SnakeSegment(bool isHead = false) :segmentColor(isHead ? sf::Color(30, 205, 0) : sf::Color(253, 230, 0)) {}
-    SnakeSegment(sf::Color color) : segmentColor(color) {}
-};
-
 struct SnakeObject
 {
-    std::string snakeName;
-    SnakeSegment head;
-    std::list<SnakeSegment> body;
-    sf::Color bodyColor;
-    sf::Color headColor;
+    friend class SnakeGame;
     sf::RectangleShape snakeShape;
     enum Direction { Up, Down, Left, Right } currentDirection;
     Direction nextDirection;
 
-    SnakeObject() : bodyColor(30,165,0), headColor(253, 230, 0){
-        head = SnakeSegment(true);
+    struct SnakeSegment
+    {
+        int x, y;
+        sf::Color segmentColor;
+
+        SnakeSegment() : segmentColor(sf::Color::Blue) {}
+        SnakeSegment(sf::Color color) : segmentColor(color) {}
+    };
+
+    SnakeSegment head;
+    std::list<SnakeSegment> body;
+
+    SnakeObject(){
+        head = SnakeSegment(sf::Color(0,200,5));
         snakeShape = sf::RectangleShape(sf::Vector2f(blockSize, blockSize));
         snakeShape.setOutlineThickness(outlineThickness);
         snakeShape.setOutlineColor(sf::Color::Green);
@@ -57,18 +57,107 @@ struct SnakeObject
         nextDirection = Direction::Up;
     }
 
-    SnakeObject(std::string name, sf::Color color): bodyColor(color), headColor(253, 230, 0), snakeName(name) {
-        head = SnakeSegment(true);
-        snakeShape = sf::RectangleShape(sf::Vector2f(blockSize, blockSize));
-        snakeShape.setOutlineThickness(outlineThickness);
-        snakeShape.setOutlineColor(sf::Color::Green);
-        currentDirection = Direction::Up;
-        nextDirection = Direction::Up;
+    void render()
+    {
+        body.clear();
+        head.x = windowWidth / 2;
+        head.y = windowHeight / 2;
+        body.push_front(head);
+    }
+
+    void changeDirection()
+    {
+        // Aktualizacja kierunku na podstawie następnego kierunku
+        currentDirection = nextDirection;
+
+        // Aktualizacja pozycji głowy węża na podstawie kierunku
+        head = body.front();
+        switch (currentDirection) {
+        case Direction::Up:
+            head.y -= blockSize - blockSize / 2;
+            break;
+        case Direction::Down:
+            head.y += blockSize - blockSize / 2;
+            break;
+        case Direction::Left:
+            head.x -= blockSize - blockSize / 2;
+            break;
+        case Direction::Right:
+            head.x += blockSize - blockSize / 2;
+            break;
+        }
+    }
+
+    void addSegment()
+    {
+        SnakeObject::SnakeSegment tail = body.back(); // Pobranie aktualnego ogona węża
+        SnakeObject::SnakeSegment newTail;
+        newTail.x = tail.x;
+        newTail.y = tail.y;
+        // dodanie nowego bloku do węża
+        body.push_back(tail);
+    }
+
+    bool checkEat(sf::CircleShape food)
+    {
+        if (head.x == food.getPosition().x && head.y == food.getPosition().y ||
+            (head.x - blockSize / 2 == food.getPosition().x && head.y + blockSize / 2 == food.getPosition().y) ||
+            (head.x + blockSize / 2 == food.getPosition().x && head.y - blockSize / 2 == food.getPosition().y))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    bool checkCollision()
+    {
+        // Sprawdzenie kolizji głowy węża z ciałem lub ścianami
+        int headX = head.x;
+        int headY = head.y;
+
+        // Kolizja ze ścianami
+        if (head.x < 0 || head.x >= windowWidth || head.y < 0 || head.y >= windowHeight) {
+            return true;
+        }
+
+        // Kolizja z ciałem węża
+        for (auto it = std::next(body.begin()); it != body.end(); ++it) {
+            if (head.x == it->x && head.y == it->y) {
+                return true;
+            }
+        }
+        return false;
     }
     
+    void render(sf::RenderWindow &window)
+    {
+        for (const auto& segment : body)
+        {
+            snakeShape.setPosition(segment.x, segment.y);
+            snakeShape.setFillColor(segment.segmentColor);
+            window.draw(snakeShape);
+        }
+    }
+
+    void handleInput()
+    {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && currentDirection != Direction::Down) {
+                nextDirection = Direction::Up;
+            }
+            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && currentDirection != Direction::Up) {
+                nextDirection = Direction::Down;
+            }
+            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && currentDirection != Direction::Right) {
+                nextDirection = Direction::Left;
+            }
+            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && currentDirection != Direction::Left) {
+                nextDirection = Direction::Right;
+            }
+    }
 };
 
 class SnakeGame {
+    friend struct SnakeObject;
 public:
     SnakeGame();
     void runGame();
@@ -82,17 +171,16 @@ public:
     bool bothReady();
     bool gameStart;
     bool enemyReady;
+    sf::CircleShape food;
 
 private:
     void updateScore();
-    void handleInput();
     void checkEvents();
     void gameUpdate();
     void gameInfo();
     void render();
     void generateFood();
     void renderObjects();
-    bool checkCollision();
 
     void receiveData();
     void sendScore();
@@ -106,7 +194,6 @@ private:
 
     SnakeObject playerSnake;
     sf::RenderWindow window;
-    sf::CircleShape food;
     sf::Font font; // czcionka do wyświetlania tekstu
     sf::Text scoreText; // tekst wyświetlający aktualny wynik
     sf::Text gameOverText; // tekst wyświetlający koniec gry i punkty graczy
@@ -130,10 +217,7 @@ SnakeGame::SnakeGame() : playerSnake(), window(sf::VideoMode(windowWidth, window
 
 void SnakeGame::renderObjects()
 {
-    playerSnake.body.clear();
-    playerSnake.head.x = windowWidth / 2;
-    playerSnake.head.y = windowHeight / 2;
-    playerSnake.body.push_front(playerSnake.head);
+    playerSnake.render();
     generateFood();
 }
 
@@ -154,7 +238,7 @@ void SnakeGame::updateScore()
     scoreText.setCharacterSize(22);
     scoreText.setFillColor(sf::Color::White);
     scoreText.setPosition(10, 30);
-    scoreText.setString("\t\t\t\t\t\t\t\t\t\t\t\tGracz: " + std::to_string(P1Score) + " Przeciwnik: " + std::to_string(P2Score));
+    scoreText.setString("\t\t\t\t\t\t\t\t\t\t\t\tTy: " + std::to_string(P1Score) + " Przeciwnik: " + std::to_string(P2Score));
 }
 
 void SnakeGame::gameInfo()
@@ -167,38 +251,38 @@ void SnakeGame::gameInfo()
     {
         if (enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: gotowy # Przeciwnik: gotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: gotowy # Przeciwnik: gotowy");
         }
         if (!enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: niegotowy # Przeciwnik: niegotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: niegotowy # Przeciwnik: niegotowy");
         }
         if (!enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: gotowy # Przeciwnik: niegotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: gotowy # Przeciwnik: niegotowy");
         }
         if (enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: niegotowy # Przeciwnik: gotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: niegotowy # Przeciwnik: gotowy");
         }
     }
     else
     {
         if (enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: skuty # Przeciwnik: skuty");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: skuty # Przeciwnik: skuty");
         }
         if(!enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: w grze # Przeciwnik: w grze");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: w grze # Przeciwnik: w grze");
         }
         if (!enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: skuty # Przeciwnik: w grze");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: skuty # Przeciwnik: w grze");
         }
         if (enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Gracz: w grze # Przeciwnik: skuty");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: w grze # Przeciwnik: skuty");
         }
     }
 }
@@ -240,7 +324,6 @@ void SnakeGame::printGameOver()
     }
 }
 
-
 void SnakeGame::checkEvents()
 {
     if (!playerReady)
@@ -269,12 +352,20 @@ void SnakeGame::runGame()
 {
     while(window.isOpen())
     {
+        sf::Event event;
         setGame();
         renderObjects();
         int remainingTime = 3 + 1; //timer 3 sekundy
 
         while (window.isOpen() && !bothReady())
         {
+            while (window.pollEvent(event))
+            {
+                if (event.type == sf::Event::Closed) {
+                    sendGameOver();
+                    window.close();
+                }
+            }
             printGameStart();
             receiveData();
             render();
@@ -283,6 +374,13 @@ void SnakeGame::runGame()
 
         while (window.isOpen() && bothReady() && !gameStart)
         {
+            while (window.pollEvent(event))
+            {
+                if (event.type == sf::Event::Closed) {
+                    sendGameOver();
+                    window.close();
+                }
+            }
             gameStartText.setCharacterSize(100);
             gameStartText.setPosition(windowWidth / 2, windowHeight / 2);
             gameStartText.setFillColor(sf::Color::Red);
@@ -311,10 +409,10 @@ void SnakeGame::runGame()
         while (window.isOpen() && gameStart)
         {
             deltaT = gameClock.restart().asSeconds();
-            sf::Event event;
             while (window.pollEvent(event))
             {
                 if (event.type == sf::Event::Closed) {
+                    sendGameOver();
                     window.close();
                 }
             }
@@ -346,7 +444,7 @@ void SnakeGame::runGame()
             else //działanie gry
             {
                 render();
-                handleInput();
+                playerSnake.handleInput();
                 gameUpdate();
                 receiveData();
                 updateScore();
@@ -364,65 +462,24 @@ void SnakeGame::gameOver()
     sendGameOver();
 }
 
-void SnakeGame::handleInput()
-{
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) && playerSnake.currentDirection != playerSnake.Direction::Down) {
-        playerSnake.nextDirection = playerSnake.Direction::Up;
-    }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) && playerSnake.currentDirection != playerSnake.Direction::Up) {
-        playerSnake.nextDirection = playerSnake.Direction::Down;
-    }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A) && playerSnake.currentDirection != playerSnake.Direction::Right) {
-        playerSnake.nextDirection = playerSnake.Direction::Left;
-    }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) && playerSnake.currentDirection != playerSnake.Direction::Left) {
-        playerSnake.nextDirection = playerSnake.Direction::Right;
-    }
-}
-
 void SnakeGame::gameUpdate()
 {
     if (!isGamePaused && !isGameOver)
     {
-        // Aktualizacja kierunku na podstawie następnego kierunku
-        playerSnake.currentDirection = playerSnake.nextDirection;
-
-        // Aktualizacja pozycji głowy węża na podstawie kierunku
-        playerSnake.head = playerSnake.body.front();
-        switch (playerSnake.currentDirection) {
-        case playerSnake.Direction::Up:
-            playerSnake.head.y -= blockSize - blockSize / 2;
-            break;
-        case playerSnake.Direction::Down:
-            playerSnake.head.y += blockSize - blockSize / 2;
-            break;
-        case playerSnake.Direction::Left:
-            playerSnake.head.x -= blockSize - blockSize / 2;
-            break;
-        case playerSnake.Direction::Right:
-            playerSnake.head.x += blockSize - blockSize / 2;
-            break;
-        }
+        playerSnake.changeDirection();
 
         // ruch wężą przed siebie
         playerSnake.body.push_front(playerSnake.head);
-        // Sprawdzenie kolizji z jedzeniem oraz z samym sobą
-        if (playerSnake.head.x == food.getPosition().x && playerSnake.head.y == food.getPosition().y ||
-            (playerSnake.head.x - blockSize / 2 == food.getPosition().x && playerSnake.head.y + blockSize / 2 == food.getPosition().y) ||
-            (playerSnake.head.x + blockSize / 2 == food.getPosition().x && playerSnake.head.y - blockSize / 2 == food.getPosition().y))
-        {
-            generateFood();
-            P1Score++; //dodanie punktów
-            sendScore();//wysłanie aktualnego wyniku na serwer
 
-            for (int i = 0; i < 2; ++i)
+        // Sprawdzenie kolizji z jedzeniem oraz z samym sobą
+        if (playerSnake.checkEat(food))
+        {
+            SnakeGame::generateFood();
+            SnakeGame::P1Score++; //dodanie punktów
+            SnakeGame::sendScore();//wysłanie aktualnego wyniku na serwer
+            for (int i = 0; i < 2; ++i) //zwiększenie o dwa bloki
             {
-                SnakeSegment tail = playerSnake.body.back(); // Pobranie aktualnego ogona węża
-                SnakeSegment newTail(playerSnake.bodyColor);
-                newTail.x = tail.x;
-                newTail.y = tail.y;
-                // dodanie nowego bloku do węża
-                playerSnake.body.push_back(newTail);
+                playerSnake.addSegment();
             }
         }
         else 
@@ -430,9 +487,8 @@ void SnakeGame::gameUpdate()
             playerSnake.body.pop_back();
         }
 
-        if (checkCollision()) 
+        if (playerSnake.checkCollision()) 
         {
-            // Zderzenie z samym sobą - koniec gry
             gameOver();
         }
     }
@@ -445,12 +501,7 @@ void SnakeGame::render()
     gameInfo();
 
     // Rysowanie węża gracza
-    for (const auto& segment : playerSnake.body) 
-    {
-        playerSnake.snakeShape.setPosition(segment.x, segment.y);
-        playerSnake.snakeShape.setFillColor(segment.segmentColor);
-        window.draw(playerSnake.snakeShape);
-    }
+    playerSnake.render(window);
 
     //Rysowanie węża przeciwnika
 
@@ -477,29 +528,9 @@ void SnakeGame::generateFood()
 
     /*food.setSize(sf::Vector2f(blockSize, blockSize));*/
     food.setOutlineThickness(outlineThickness);
-    food.setRadius(float(blockSize/2));
+    food.setRadius(float(blockSize/2-outlineThickness/2));
     food.setFillColor(foodColor);
     food.setPosition(foodX, foodY);
-}
-
-bool SnakeGame::checkCollision()
-{
-    // Sprawdzenie kolizji głowy węża z ciałem lub ścianami
-    int headX = playerSnake.head.x;
-    int headY = playerSnake.head.y;
-
-    // Kolizja ze ścianami
-    if (headX < 0 || headX >= windowWidth || headY < 0 || headY >= windowHeight) {
-        return true;
-    }
-
-    // Kolizja z ciałem węża
-    for (auto it = std::next(playerSnake.body.begin()); it != playerSnake.body.end(); ++it) {
-        if (headX == it->x && headY == it->y) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool SnakeGame::bothReady()
@@ -590,10 +621,9 @@ void checkConnection()
     else { std::cout << "odebrano wiadomosc testowa!\n"; return; }
 }
 
-
 int main(int argc, char** argv)
 {
-    std::cout << "---------Rozpoczecie programu----------\n";
+    std::cout << "---------Uruchomienie Gry Snake----------\n";
     connectToServer();
     checkConnection();
     SnakeGame game;
@@ -604,7 +634,6 @@ int main(int argc, char** argv)
     return 0;
 }
 
-
 void SnakeGame::receiveData()
 {
     int receivedSize;
@@ -612,12 +641,10 @@ void SnakeGame::receiveData()
     int score;
     std::string message;
 
-    // Utworzenie zbioru deskryptorów gniazd sieciowych
     fd_set set;
     FD_ZERO(&set);
     FD_SET(tcpSocket, &set);
 
-    // Ustawienie czasu oczekiwania na dane gotowe do odczytu
     timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 0;
@@ -629,7 +656,6 @@ void SnakeGame::receiveData()
         return;
     }
     else if (result == 0) {
-        // Brak danych gotowych do odczytu
         return;
     }
     // Odebranie wiadomości
