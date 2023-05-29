@@ -29,7 +29,6 @@ bool isGameOver;
 bool gameStarted;
 bool firstLaunch = true;
 
-
 void connectToServer()
 {
     sockaddr_in serverAddr;
@@ -90,6 +89,12 @@ void connectToServer()
 
 bool checkConnection()
 {
+    char receivedData[512];
+
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(tcpSocket, &set);
+
     std::string message = "test!\n"; // Pierwsza wiadomość potwierdzająca połączenie klienta z serwerem
     while (true)
     {
@@ -100,11 +105,8 @@ bool checkConnection()
         }
         else break;
     }
-    std::cout << "sprawdzanie polaczenia z drugim klientem\n";
 
-    // Sprawdzenie czy klient moze odebrac dane
-    char recMsg[512];
-    if (recv(tcpSocket, recMsg, sizeof(recMsg), 0) == SOCKET_ERROR) {
+    if (recv(tcpSocket, receivedData, sizeof(receivedData), 0) == SOCKET_ERROR) {
         std::cout << "Nie udalo sie odebrac danych od serwera.\n" << std::endl;
         closesocket(tcpSocket);
         return false;
@@ -184,8 +186,8 @@ struct SnakeObject
     bool checkEat(sf::CircleShape food)
     {
         if (head.x == food.getPosition().x && head.y == food.getPosition().y ||
-            (head.x - blockSize / 2 == food.getPosition().x && head.y + blockSize / 2 == food.getPosition().y) ||
-            (head.x + blockSize / 2 == food.getPosition().x && head.y - blockSize / 2 == food.getPosition().y))
+            (head.x == food.getPosition().x - blockSize/2 && head.y == food.getPosition().y - blockSize / 2) ||
+            (head.x == food.getPosition().x + blockSize / 2 && head.y == food.getPosition().y + blockSize / 2))
         {
             return true;
         }
@@ -199,12 +201,14 @@ struct SnakeObject
         int headY = head.y;
 
         // Kolizja ze ścianami
-        if (head.x < 0 || head.x >= windowWidth || head.y < 0 || head.y >= windowHeight) {
+        if (head.x <= 0 || head.x >= windowWidth-blockSize || head.y <= 0 || head.y >= windowHeight - blockSize) 
+        {
             return true;
         }
 
         // Kolizja z ciałem węża
-        for (auto it = std::next(body.begin()); it != body.end(); ++it) {
+        for (auto it = std::next(body.begin()); it != body.end(); ++it) 
+        {
             if (head.x == it->x && head.y == it->y) {
                 return true;
             }
@@ -348,38 +352,38 @@ void SnakeGame::gameInfo()
     {
         if (enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: gotowy # Przeciwnik: gotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: gotowy     Przeciwnik: gotowy");
         }
         if (!enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: niegotowy # Przeciwnik: niegotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: niegotowy  Przeciwnik: niegotowy");
         }
         if (!enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: gotowy # Przeciwnik: niegotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: gotowy     Przeciwnik: niegotowy");
         }
         if (enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: niegotowy # Przeciwnik: gotowy");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: niegotowy  Przeciwnik: gotowy");
         }
     }
     else
     {
         if (enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: skuty # Przeciwnik: skuty");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: skuty      Przeciwnik: skuty");
         }
         if(!enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: w grze # Przeciwnik: w grze");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: w grze     Przeciwnik: w grze");
         }
         if (!enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: skuty # Przeciwnik: w grze");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: skuty      Przeciwnik: w grze");
         }
         if (enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t Ty: w grze # Przeciwnik: skuty");
+            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: w grze     Przeciwnik: skuty");
         }
     }
 }
@@ -405,10 +409,10 @@ void SnakeGame::printGameRestart()
 void SnakeGame::printGameWaitingForConnection()
 {
     gameStartText.setFont(font);
-    gameStartText.setCharacterSize(40);
+    gameStartText.setCharacterSize(39);
     gameStartText.setFillColor(sf::Color::White);
     gameStartText.setPosition(windowWidth / 2 - 550, windowHeight / 2 - 50);
-    gameStartText.setString("    Oczekiwanie na polaczenie z przeciwnikiem...");
+    gameStartText.setString("     Oczekiwanie na polaczenie z przeciwnikiem...");
 }
 
 void SnakeGame::printGameOver()
@@ -459,16 +463,13 @@ void SnakeGame::menu()
     window.clear(backgroundColor);
     printGameWaitingForConnection();
     sf::Event event;  // Inicjalizacja zmiennej event
-    //sf::Text inputText("x x x", sf::Font(), 20);
     connectToServer();
     while (window.isOpen() && !playerReady && !enemyReady)
     {
-       /* drawMenu(window, inputText);
-        handleEvents(window, event, inputText);*/
         window.draw(gameStartText);
         checkWindowEvents(window);
         window.display();
-        if (checkConnection) { firstLaunch = false; break; }
+        if (checkConnection()) { firstLaunch = false; break; }
     }
 }
 
@@ -476,11 +477,10 @@ void SnakeGame::runGame()
 {
     while(window.isOpen())
     {
-        if (firstLaunch) { menu(); }
+        int remainingTime = 3+1;
+        if (firstLaunch) {menu();}
         setGame();
-        checkConnection();
-
-        int remainingTime = 3 + 1; //timer 3 sekundy
+        checkWindowEvents(window);
 
         while (window.isOpen() && !bothReady())
         {
@@ -498,7 +498,6 @@ void SnakeGame::runGame()
             gameStartText.setCharacterSize(100);
             gameStartText.setPosition(windowWidth / 2 - blockSize, windowHeight / 2);
             gameStartText.setFillColor(sf::Color::Red);
-
             render();
             receiveData();
 
@@ -539,7 +538,7 @@ void SnakeGame::runGame()
                 enemyReady = false;
                 playerReady = false;
                 isGameRunning = false;
-                sf::sleep(sf::seconds(2));
+
                 while (!bothReady())
                 {
                     checkWindowEvents(window);
@@ -652,7 +651,6 @@ int main(int argc, char** argv)
     std::cout << "---------Uruchomienie Gry Snake----------\n";
     SnakeGame game;
     game.runGame();
-    std::cout << "---------Program zostal zamkniety----------\n";
     closesocket(tcpSocket);
     WSACleanup();
     return 0;
@@ -675,11 +673,7 @@ void SnakeGame::receiveData()
 
     // Sprawdzenie, czy istnieją dane gotowe do odczytu
     int result = select(0, &set, NULL, NULL, &timeout);
-    if (result == SOCKET_ERROR) {
-        std::cout << "Blad w funkcji select(): " << WSAGetLastError() << std::endl;
-        return;
-    }
-    else if (result == 0) {
+    if (result == 0) {
         return;
     }
     // Odebranie wiadomości
