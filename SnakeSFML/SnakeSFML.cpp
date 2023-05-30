@@ -20,9 +20,8 @@ const int windowHeight = 840;
 const float outlineThickness = 2;
 const int blockSize = 20;
 const int frameLimit = 55;
-const sf::Color backgroundColor(10, 10, 11);
+const sf::Color backgroundColor(10, 10, 10);
 const sf::Color foodColor = sf::Color::Red;
-float deltaT;
 sf::Clock gameClock;
 SOCKET tcpSocket = INVALID_SOCKET;
 bool isGameOver;
@@ -325,8 +324,9 @@ void SnakeGame::checkWindowEvents(sf::RenderWindow& window)
     sf::Event event;
     while (window.pollEvent(event))
     {
-        if (event.type == sf::Event::Closed) {
-            sendGameOver();
+        if (event.type == sf::Event::Closed) 
+        {
+            closesocket(tcpSocket);
             window.close();
         }
     }
@@ -338,8 +338,8 @@ void SnakeGame::updateScore()
     scoreText.setFont(font);
     scoreText.setCharacterSize(22);
     scoreText.setFillColor(sf::Color::White);
-    scoreText.setPosition(10, 30);
-    scoreText.setString("\t\t\t\t\t\t\t\t\t\t\t\tTy: " + std::to_string(P1Score) + " Przeciwnik: " + std::to_string(P2Score));
+    scoreText.setPosition(windowWidth/2 - 130, 30);
+    scoreText.setString("Ty: " + std::to_string(P1Score) + " Przeciwnik: " + std::to_string(P2Score));
 }
 
 void SnakeGame::gameInfo()
@@ -347,43 +347,43 @@ void SnakeGame::gameInfo()
     gameInfoText.setFont(font);
     gameInfoText.setCharacterSize(22);
     gameInfoText.setFillColor(sf::Color::White);
-    gameInfoText.setPosition(10, 5);
+    gameInfoText.setPosition(windowWidth/2-220, 5);
     if (!isGameRunning)
     {
         if (enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: gotowy     Przeciwnik: gotowy");
+            gameInfoText.setString("Ty: gotowy     Przeciwnik: gotowy");
         }
         if (!enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: niegotowy  Przeciwnik: niegotowy");
+            gameInfoText.setString("Ty: niegotowy  Przeciwnik: niegotowy");
         }
         if (!enemyReady && playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: gotowy     Przeciwnik: niegotowy");
+            gameInfoText.setString("Ty: gotowy     Przeciwnik: niegotowy");
         }
         if (enemyReady && !playerReady)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: niegotowy  Przeciwnik: gotowy");
+            gameInfoText.setString("Ty: niegotowy  Przeciwnik: gotowy");
         }
     }
     else
     {
         if (enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: skuty      Przeciwnik: skuty");
+            gameInfoText.setString("Ty: skuty      Przeciwnik: skuty");
         }
         if(!enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: w grze     Przeciwnik: w grze");
+            gameInfoText.setString("Ty: w grze     Przeciwnik: w grze");
         }
         if (!enemyGameOver && isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: skuty      Przeciwnik: w grze");
+            gameInfoText.setString("Ty: skuty      Przeciwnik: w grze");
         }
         if (enemyGameOver && !isGameOver)
         {
-            gameInfoText.setString("dT: " + std::to_string(deltaT) + "\t\t\t\t\t Ty: w grze     Przeciwnik: skuty");
+            gameInfoText.setString("Ty: w grze     Przeciwnik: skuty");
         }
     }
 }
@@ -403,7 +403,7 @@ void SnakeGame::printGameRestart()
     gameStartText.setCharacterSize(40);
     gameStartText.setFillColor(sf::Color::White);
     gameStartText.setPosition(windowWidth / 2 - 350, windowHeight / 2);
-    gameStartText.setString("\t\tWcisnij dowolny klawisz\n jesli chcesz zagrac jeszcze raz");
+    gameStartText.setString("\t\t Wcisnij dowolny klawisz\n jesli chcesz zagrac jeszcze raz");
 }
 
 void SnakeGame::printGameWaitingForConnection()
@@ -443,26 +443,19 @@ void SnakeGame::checkEvents()
         {
             if (ispressed.type == sf::Event::KeyPressed)
             {
-                std::cout << "KLAWISZ ZOSTAL WCISNIETY\n";
+                std::cout << "Klawisz zostal wcisniety\n";
                 sendDecision();
             }
-        }
-    }
-
-    sf::Event event;
-    while (window.pollEvent(event))
-    {
-        if (event.type == sf::Event::Closed) {
-            window.close();
         }
     }
 }
 
 void SnakeGame::menu()
 {
+    checkWindowEvents(window);
     window.clear(backgroundColor);
     printGameWaitingForConnection();
-    sf::Event event;  // Inicjalizacja zmiennej event
+    sf::Event event; 
     connectToServer();
     while (window.isOpen() && !playerReady && !enemyReady)
     {
@@ -504,7 +497,7 @@ void SnakeGame::runGame()
             if (gameClock.getElapsedTime() >= sf::seconds(1))
             {
                 remainingTime -= 1;
-                std::cout << "Pozostaly czas do startu: " << remainingTime << std::endl;
+                std::cout << "Czas do startu: " << remainingTime << std::endl;
                 gameClock.restart();
 
                 if (remainingTime > 0)
@@ -521,7 +514,6 @@ void SnakeGame::runGame()
 
         while (window.isOpen() && isGameRunning)
         {
-            deltaT = gameClock.restart().asSeconds();
             checkWindowEvents(window);
             if (isGameOver && !enemyGameOver)
             {
@@ -532,7 +524,6 @@ void SnakeGame::runGame()
             }
             else if (isGameOver && enemyGameOver)
             {
-                checkWindowEvents(window);
                 render();
                 printGameOver();
                 enemyReady = false;
@@ -541,7 +532,6 @@ void SnakeGame::runGame()
 
                 while (!bothReady())
                 {
-                    checkWindowEvents(window);
                     render();
                     printGameOver();
                     printGameRestart();
